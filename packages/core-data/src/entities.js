@@ -59,33 +59,6 @@ export const rootEntitiesConfig = [
 		getSyncObjectId: () => 'index',
 	},
 	{
-		label: __( 'Site' ),
-		name: 'site',
-		kind: 'root',
-		baseURL: '/wp/v2/settings',
-		getTitle: ( record ) => {
-			return record?.title ?? __( 'Site Title' );
-		},
-		syncConfig: {
-			fetch: async () => {
-				return apiFetch( { path: '/wp/v2/settings' } );
-			},
-			applyChangesToDoc: ( doc, changes ) => {
-				const document = doc.getMap( 'document' );
-				Object.entries( changes ).forEach( ( [ key, value ] ) => {
-					if ( document.get( key ) !== value ) {
-						document.set( key, value );
-					}
-				} );
-			},
-			fromCRDTDoc: ( doc ) => {
-				return doc.getMap( 'document' ).toJSON();
-			},
-		},
-		syncObjectType: 'root/site',
-		getSyncObjectId: () => 'index',
-	},
-	{
 		label: __( 'Post Type' ),
 		name: 'postType',
 		kind: 'root',
@@ -244,6 +217,7 @@ export const rootEntitiesConfig = [
 export const additionalEntityConfigLoaders = [
 	{ kind: 'postType', loadEntities: loadPostTypeEntities },
 	{ kind: 'taxonomy', loadEntities: loadTaxonomyEntities },
+	{ kind: 'root', loadEntities: loadSiteEntity },
 ];
 
 /**
@@ -401,6 +375,48 @@ async function loadTaxonomyEntities() {
 }
 
 /**
+ * Returns the Site entity.
+ *
+ * @return {Promise} Entity promise
+ */
+async function loadSiteEntity() {
+	const entity = {
+		label: __( 'Site' ),
+		name: 'site',
+		kind: 'root',
+		baseURL: '/wp/v2/settings',
+		syncConfig: {
+			fetch: async () => {
+				return apiFetch( { path: '/wp/v2/settings' } );
+			},
+			applyChangesToDoc: ( doc, changes ) => {
+				const document = doc.getMap( 'document' );
+				Object.entries( changes ).forEach( ( [ key, value ] ) => {
+					if ( document.get( key ) !== value ) {
+						document.set( key, value );
+					}
+				} );
+			},
+			fromCRDTDoc: ( doc ) => {
+				return doc.getMap( 'document' ).toJSON();
+			},
+		},
+		syncObjectType: 'root/site',
+		getSyncObjectId: () => 'index',
+		meta: {},
+	};
+
+	const site = await apiFetch( {
+		path: '/wp/v2/settings',
+		method: 'OPTIONS',
+	} );
+
+	const labels = site?.schema?.properties ?? {};
+
+	return [ { ...entity, meta: { labels } } ];
+}
+
+/**
  * Returns the entity's getter method name given its kind and name.
  *
  * @example
@@ -450,14 +466,18 @@ function registerSyncConfigs( configs ) {
  * Loads the kind entities into the store.
  *
  * @param {string} kind Kind
- *
+ * @param {string} name Name
  * @return {(thunkArgs: object) => Promise<Array>} Entities
  */
 export const getOrLoadEntitiesConfig =
-	( kind ) =>
+	( kind, name ) =>
 	async ( { select, dispatch } ) => {
 		let configs = select.getEntitiesConfig( kind );
-		if ( configs && configs.length !== 0 ) {
+		const hasConfig = !! configs?.find(
+			( config ) => config.kind === kind && config.name === name
+		);
+
+		if ( configs?.length > 0 && hasConfig ) {
 			if ( window.__experimentalEnableSync ) {
 				if ( process.env.IS_GUTENBERG_PLUGIN ) {
 					registerSyncConfigs( configs );
@@ -467,9 +487,13 @@ export const getOrLoadEntitiesConfig =
 			return configs;
 		}
 
-		const loader = additionalEntityConfigLoaders.find(
-			( l ) => l.kind === kind
-		);
+		const loader = additionalEntityConfigLoaders.find( ( l ) => {
+			if ( ! name || ! l.name ) {
+				return l.kind === kind;
+			}
+
+			return l.kind === kind && l.name === name;
+		} );
 		if ( ! loader ) {
 			return [];
 		}
