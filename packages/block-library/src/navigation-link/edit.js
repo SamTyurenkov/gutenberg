@@ -367,7 +367,9 @@ export default function NavigationLinkEdit( {
 	);
 
 	if ( ! url || isInvalid || isDraft ) {
-		blockProps.onClick = () => setIsLinkOpen( true );
+		blockProps.onClick = () => {
+			setIsLinkOpen( true );
+		};
 	}
 
 	const classes = classnames( 'wp-block-navigation-item__content', {
@@ -515,11 +517,6 @@ export default function NavigationLinkEdit( {
 												'core/image',
 												'core/strikethrough',
 											] }
-											onClick={ () => {
-												if ( ! url ) {
-													setIsLinkOpen( true );
-												}
-											} }
 										/>
 										{ description && (
 											<span className="wp-block-navigation-item__description">
